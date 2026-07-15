@@ -1,18 +1,75 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const { sequelize } = require('../config/db');
 
-const MachineSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  type: { type: String, required: true },
-  status: { type: String, enum: ['Active', 'Idle', 'Maintenance', 'Offline'], default: 'Idle' },
-  location: {
-    lat: { type: Number, default: 0 },
-    lng: { type: Number, default: 0 }
+const Machine = sequelize.define('Machine', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true,
   },
-  lastServiceDate: { type: Date, default: Date.now },
-  runtimeHours: { type: Number, default: 0 },
-  performanceScore: { type: Number, default: 100 },
-  priority: { type: String, enum: ['High', 'Normal'], default: 'Normal' },
-  city: { type: String, default: 'Unknown' }
-}, { timestamps: true });
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  type: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  status: {
+    type: DataTypes.ENUM('Active', 'Idle', 'Maintenance', 'Offline'),
+    defaultValue: 'Idle',
+  },
+  lat: {
+    type: DataTypes.DOUBLE,
+    defaultValue: 0.0,
+  },
+  lng: {
+    type: DataTypes.DOUBLE,
+    defaultValue: 0.0,
+  },
+  lastServiceDate: {
+    type: DataTypes.DATE,
+    defaultValue: DataTypes.NOW,
+  },
+  runtimeHours: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+  },
+  performanceScore: {
+    type: DataTypes.INTEGER,
+    defaultValue: 100,
+  },
+  priority: {
+    type: DataTypes.ENUM('High', 'Normal'),
+    defaultValue: 'Normal',
+  },
+  city: {
+    type: DataTypes.STRING,
+    defaultValue: 'Unknown',
+  },
+  _id: {
+    type: DataTypes.VIRTUAL,
+    get() {
+      return this.getDataValue('id');
+    }
+  },
+  location: {
+    type: DataTypes.VIRTUAL,
+    get() {
+      return {
+        lat: this.getDataValue('lat'),
+        lng: this.getDataValue('lng')
+      };
+    },
+    set(value) {
+      if (value) {
+        this.setDataValue('lat', value.lat);
+        this.setDataValue('lng', value.lng);
+      }
+    }
+  }
+}, {
+  timestamps: true,
+});
 
-module.exports = mongoose.model('Machine', MachineSchema);
+module.exports = Machine;

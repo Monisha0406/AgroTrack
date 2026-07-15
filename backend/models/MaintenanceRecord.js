@@ -1,12 +1,45 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const { sequelize } = require('../config/db');
+const Machine = require('./Machine');
 
-const MaintenanceRecordSchema = new mongoose.Schema({
-  machine: { type: mongoose.Schema.Types.ObjectId, ref: 'Machine', required: true },
-  scheduledDate: { type: Date, required: true },
-  status: { type: String, enum: ['Upcoming', 'Completed', 'Overdue'], default: 'Upcoming' },
-  details: { type: String, default: 'General Service' },
-  cost: { type: Number, default: 0 },
-  serviceType: { type: String, default: 'Routine Maintenance' }
-}, { timestamps: true });
+const MaintenanceRecord = sequelize.define('MaintenanceRecord', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true,
+  },
+  scheduledDate: {
+    type: DataTypes.DATE,
+    allowNull: false,
+  },
+  status: {
+    type: DataTypes.ENUM('Upcoming', 'Completed', 'Overdue'),
+    defaultValue: 'Upcoming',
+  },
+  details: {
+    type: DataTypes.STRING,
+    defaultValue: 'General Service',
+  },
+  cost: {
+    type: DataTypes.DOUBLE,
+    defaultValue: 0,
+  },
+  serviceType: {
+    type: DataTypes.STRING,
+    defaultValue: 'Routine Maintenance',
+  },
+  _id: {
+    type: DataTypes.VIRTUAL,
+    get() {
+      return this.getDataValue('id');
+    }
+  }
+}, {
+  timestamps: true,
+});
 
-module.exports = mongoose.model('MaintenanceRecord', MaintenanceRecordSchema);
+// Relationships
+MaintenanceRecord.belongsTo(Machine, { foreignKey: 'machineId', as: 'machine', onDelete: 'CASCADE' });
+Machine.hasMany(MaintenanceRecord, { foreignKey: 'machineId', as: 'maintenanceRecords', onDelete: 'CASCADE' });
+
+module.exports = MaintenanceRecord;

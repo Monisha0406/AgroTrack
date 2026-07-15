@@ -1,14 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const Machine = require('../models/Machine');
-const MaintenanceRecord = require('../models/MaintenanceRecord');
 
 router.get('/', async (req, res) => {
   try {
-    const totalMachines = await Machine.countDocuments({});
-    const activeMachines = await Machine.countDocuments({ status: 'Active' });
-    const idleMachines = await Machine.countDocuments({ status: 'Idle' });
-    const maintenanceMachines = await Machine.countDocuments({ status: 'Maintenance' });
+    const totalMachines = await Machine.count({});
+    const activeMachines = await Machine.count({ where: { status: 'Active' } });
+    const idleMachines = await Machine.count({ where: { status: 'Idle' } });
+    const maintenanceMachines = await Machine.count({ where: { status: 'Maintenance' } });
     
     // Quick mock data for charts
     const chartData = [

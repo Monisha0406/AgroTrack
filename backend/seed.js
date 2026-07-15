@@ -1,17 +1,13 @@
 /**
- * Seed Script — AgriTrack CRM (Tamil Nadu Edition)
+ * Seed Script — AgriTrack CRM (Tamil Nadu Edition for MySQL)
  * Run: node seed.js
- * Seeds 32 machines + realistic maintenance records
+ * Seeds 32 machines + realistic maintenance records + default Admin User in MySQL
  */
 
-const mongoose = require('mongoose');
+const { sequelize } = require('./config/db');
 const Machine = require('./models/Machine');
 const MaintenanceRecord = require('./models/MaintenanceRecord');
-
-mongoose
-  .connect('mongodb://127.0.0.1:27017/crm_machine_tracking')
-  .then(() => console.log('MongoDB connected for seeding...'))
-  .catch(err => { console.error(err); process.exit(1); });
+const User = require('./models/User');
 
 // Tamil Nadu city coordinates (realistic lat/lng bounds)
 const tnLocations = [
@@ -34,9 +30,10 @@ const jitter = (val, range = 0.05) => val + (Math.random() - 0.5) * range;
 
 const seed = async () => {
   try {
-    await Machine.deleteMany({});
-    await MaintenanceRecord.deleteMany({});
-    console.log('Cleared existing data.');
+    console.log('Connecting to MySQL & resetting database tables...');
+    // Force sync drops all tables and rebuilds schemas
+    await sequelize.sync({ force: true });
+    console.log('Database tables cleared and recreated.');
 
     const statuses = ['Active', 'Active', 'Active', 'Idle', 'Idle', 'Maintenance'];
 
@@ -86,7 +83,7 @@ const seed = async () => {
     // Force certain machines into Maintenance for dashboard variety
     const maintenanceForcedIdx = [3, 9, 14, 18, 23, 27]; // 6 machines in maintenance
 
-    const machines = await Machine.insertMany(
+    const machines = await Machine.bulkCreate(
       machineData.map((m, i) => {
         const base = tnLocations[m.locIdx];
         let status = statuses[i % statuses.length];
@@ -100,7 +97,8 @@ const seed = async () => {
           type: m.type,
           status,
           city: base.city,
-          location: { lat: jitter(base.lat), lng: jitter(base.lng) },
+          lat: jitter(base.lat),
+          lng: jitter(base.lng),
           runtimeHours: Math.floor(Math.random() * 3000 + 100),
           priority: maintenanceForcedIdx.includes(i) ? 'High' : 'Normal',
           lastServiceDate,
@@ -108,7 +106,7 @@ const seed = async () => {
       })
     );
 
-    console.log(`✅ Seeded ${machines.length} machines across Tamil Nadu.`);
+    console.log(`✅ Seeded ${machines.length} machines across Tamil Nadu in MySQL.`);
 
     // ── Maintenance Records ────────────────────────────────
     const today = new Date();
@@ -133,8 +131,6 @@ const seed = async () => {
       'Fuel Injector Cleaning',
     ];
 
-    const priorities = ['High', 'Normal', 'High', 'Normal', 'Normal', 'High'];
-
     const maintenanceRecords = [];
     const statusPool = ['Completed', 'Upcoming', 'Overdue', 'Completed', 'Upcoming'];
 
@@ -143,10 +139,9 @@ const seed = async () => {
       const numRecords = maintenanceForcedIdx.includes(i) ? 2 : 1;
       for (let r = 0; r < numRecords; r++) {
         const status = statusPool[(i + r) % statusPool.length];
-        const dateOffset = status === 'Completed' ? -daysAgo(0).getDate() : (status === 'Overdue' ? -2 : (i % 20) + 5);
 
         maintenanceRecords.push({
-          machine: machine._id,
+          machineId: machine.id, // Sequelize UUID ForeignKey
           scheduledDate: status === 'Completed' ? daysAgo(Math.floor(Math.random() * 20 + 5)) : daysAhead(Math.floor(Math.random() * 30 + 1)),
           status,
           details: serviceTypes[(i + r) % serviceTypes.length],
@@ -156,10 +151,19 @@ const seed = async () => {
       }
     });
 
-    await MaintenanceRecord.insertMany(maintenanceRecords);
-    console.log(`✅ Seeded ${maintenanceRecords.length} maintenance records.`);
+    await MaintenanceRecord.bulkCreate(maintenanceRecords);
+    console.log(`✅ Seeded ${maintenanceRecords.length} maintenance records in MySQL.`);
 
-    console.log('\n🚀 Done! Restart your Node server now: node server.js');
+    // Seed default Admin user
+    await User.create({
+      name: 'Admin User',
+      email: 'admin@agritrack.com',
+      password: 'password123',
+      role: 'Admin'
+    });
+    console.log('✅ Seeded default admin user in MySQL (admin@agritrack.com / password123).');
+
+    console.log('\n🚀 Done! MySQL database seeding completed successfully!');
     process.exit(0);
   } catch (err) {
     console.error('Seeding error:', err.message);

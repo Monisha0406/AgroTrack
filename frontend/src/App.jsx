@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/layout/Layout';
 import Dashboard from './pages/Dashboard';
 import Machines from './pages/Machines';
@@ -10,7 +10,7 @@ import Reports from './pages/Reports';
 import Analytics from './pages/Analytics';
 import Alerts from './pages/Alerts';
 import Settings from './pages/Settings';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthProvider } from './context/AuthContext';
 
 const ProtectedRoute = ({ children }) => {
   return children;
@@ -53,4 +53,4 @@ const App = () => {
   );
 };
 
-export default App;
+export default App

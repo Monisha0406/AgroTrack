@@ -1,9 +1,9 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
 const dotenv = require('dotenv');
+const { sequelize, connectDB } = require('./config/db');
 
 dotenv.config();
 
@@ -25,11 +25,13 @@ app.use((req, res, next) => {
   next();
 });
 
-// Connect to MongoDB
-mongoose
-  .connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/crm_machine_tracking')
-  .then(() => console.log('MongoDB connected successfully'))
-  .catch((err) => console.error('MongoDB connection error:', err));
+// Connect to MySQL database
+connectDB();
+
+// Sync Database Tables
+sequelize.sync({ alter: true })
+  .then(() => console.log('MySQL database tables synchronized successfully.'))
+  .catch((err) => console.error('MySQL database sync error:', err));
 
 // Routes Configuration
 app.use('/api/auth', require('./routes/auth'));
@@ -39,10 +41,10 @@ app.use('/api/maintenance', require('./routes/maintenance'));
 
 // Basic Route
 app.get('/', (req, res) => {
-  res.send('CRM Machine Tracking API is running');
+  res.send('CRM Machine Tracking API is running (MySQL)');
 });
 
-// Socket.io Connection & Simulation Loop
+// Socket.io Connection
 io.on('connection', (socket) => {
   console.log('A user connected:', socket.id);
   socket.on('disconnect', () => {
@@ -52,21 +54,20 @@ io.on('connection', (socket) => {
 
 // Tamil Nadu geographic bounds
 const TN_BOUNDS = { latMin: 8.0, latMax: 13.5, lngMin: 76.9, lngMax: 80.3 };
-
 const clamp = (val, min, max) => Math.min(Math.max(val, min), max);
 
-// Telemetry Simulation — Tamil Nadu region
+// Telemetry Simulation — Tamil Nadu region using Sequelize
 const Machine = require('./models/Machine');
 const statuses = ['Active', 'Idle', 'Maintenance'];
 
 setInterval(async () => {
   try {
-    const count = await Machine.countDocuments();
+    const count = await Machine.count();
     if (count > 0) {
       // Pick 2 random machines per tick for more activity
       for (let t = 0; t < 2; t++) {
         const random = Math.floor(Math.random() * count);
-        const machine = await Machine.findOne().skip(random);
+        const machine = await Machine.findOne({ offset: random });
         if (!machine) continue;
 
         const newStatus = statuses[Math.floor(Math.random() * statuses.length)];
@@ -74,13 +75,13 @@ setInterval(async () => {
         machine.runtimeHours += Math.floor(Math.random() * 3);
 
         // Move Active machines within TN bounds
-        if (machine.location && machine.status === 'Active') {
-          machine.location.lat = clamp(
-            machine.location.lat + (Math.random() - 0.5) * 0.003,
+        if (machine.status === 'Active') {
+          machine.lat = clamp(
+            machine.lat + (Math.random() - 0.5) * 0.003,
             TN_BOUNDS.latMin, TN_BOUNDS.latMax
           );
-          machine.location.lng = clamp(
-            machine.location.lng + (Math.random() - 0.5) * 0.003,
+          machine.lng = clamp(
+            machine.lng + (Math.random() - 0.5) * 0.003,
             TN_BOUNDS.lngMin, TN_BOUNDS.lngMax
           );
         }
@@ -88,25 +89,24 @@ setInterval(async () => {
         await machine.save();
         io.emit('machine-status-changed', machine);
         io.emit('machine-location-changed', machine);
-        console.log(`[Telemetry] ${machine.name} → ${newStatus} @ (${machine.location?.lat?.toFixed(4)}, ${machine.location?.lng?.toFixed(4)})`);
+        console.log(`[Telemetry] ${machine.name} → ${newStatus} @ (${machine.lat?.toFixed(4)}, ${machine.lng?.toFixed(4)})`);
       }
     } else {
       // Fallback seed if DB is empty (TN coordinates)
       const initialMachines = [
-        { name: 'Tractor TN-01',   type: 'Tractor',   status: 'Active',      location: { lat: 13.08, lng: 80.27 }, runtimeHours: 1240, city: 'Chennai' },
-        { name: 'Harvester TN-09', type: 'Harvester',  status: 'Active',      location: { lat: 11.02, lng: 76.96 }, runtimeHours: 890,  city: 'Coimbatore' },
-        { name: 'Sprayer TN-15',   type: 'Sprayer',    status: 'Idle',        location: { lat: 9.93,  lng: 78.12 }, runtimeHours: 450,  city: 'Madurai' },
-        { name: 'Planter TN-20',   type: 'Planter',    status: 'Maintenance', location: { lat: 10.79, lng: 78.70 }, runtimeHours: 780,  city: 'Trichy' },
-        { name: 'Tractor TN-05',   type: 'Tractor',    status: 'Active',      location: { lat: 11.66, lng: 78.15 }, runtimeHours: 320,  city: 'Salem' },
+        { name: 'Tractor TN-01',   type: 'Tractor',   status: 'Active',      lat: 13.08, lng: 80.27, runtimeHours: 1240, city: 'Chennai' },
+        { name: 'Harvester TN-09', type: 'Harvester',  status: 'Active',      lat: 11.02, lng: 76.96, runtimeHours: 890,  city: 'Coimbatore' },
+        { name: 'Sprayer TN-15',   type: 'Sprayer',    status: 'Idle',        lat: 9.93,  lng: 78.12, runtimeHours: 450,  city: 'Madurai' },
+        { name: 'Planter TN-20',   type: 'Planter',    status: 'Maintenance', lat: 10.79, lng: 78.70, runtimeHours: 780,  city: 'Trichy' },
+        { name: 'Tractor TN-05',   type: 'Tractor',    status: 'Active',      lat: 11.66, lng: 78.15, runtimeHours: 320,  city: 'Salem' },
       ];
-      await Machine.insertMany(initialMachines);
+      await Machine.bulkCreate(initialMachines);
       console.log('Fallback: seeded initial TN machines. Run node seed.js for full 32-machine dataset.');
     }
   } catch (err) {
     console.error('Simulation error:', err.message);
   }
 }, 8000);
-
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
